@@ -120,7 +120,8 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype
+    ContentType: req.file.mimetype,
+    ACL: "public-read" // Ensure public access
   };
 
   console.log("🟢 Uploading File:", fileName);
@@ -136,6 +137,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
+
 
 
 // API Route: Delete Client from PostgreSQL
@@ -159,7 +161,8 @@ app.put("/clients/:id", async (req, res) => {
     premium_paid,
     paid_to_apex,
     insurer,
-    renewal_date
+    renewal_date,
+    additional_attachments // Ensure attachments are included
   } = req.body;
 
   try {
@@ -168,9 +171,9 @@ app.put("/clients/:id", async (req, res) => {
     const result = await pool.query(
       `UPDATE clients 
        SET name = $1, policy_number = $2, vehicle_number = $3, premium_paid = $4, 
-           paid_to_apex = $5, insurer = $6, renewal_date = $7
-       WHERE id = $8 RETURNING *`,
-      [name, policy_number, vehicle_number, premium_paid, paid_to_apex, insurer, renewal_date, id]
+           paid_to_apex = $5, insurer = $6, renewal_date = $7, additional_attachments = $8
+       WHERE id = $9 RETURNING *`,
+      [name, policy_number, vehicle_number, premium_paid, paid_to_apex, insurer, renewal_date, JSON.stringify(additional_attachments), id]
     );
 
     if (result.rowCount === 0) {
@@ -183,6 +186,59 @@ app.put("/clients/:id", async (req, res) => {
   } catch (error) {
     console.error("❌ Error updating client:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
+  const { id } = req.params;
+
+  if (!req.file) {
+    console.log("❌ No file received");
+    return res.status(400).json({ error: "No file uploaded" });
+  }
+
+  const fileName = `uploads/${Date.now()}_${req.file.originalname}`;
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: fileName,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype,
+    ACL: "public-read"
+  };
+
+  try {
+    await s3.send(new PutObjectCommand(params));
+    const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+
+    console.log("✅ File Uploaded to S3:", fileUrl);
+
+    // Get existing attachments
+    const clientResult = await pool.query("SELECT additional_attachments FROM clients WHERE id = $1", [id]);
+
+    if (clientResult.rowCount === 0) {
+      console.log(`❌ Client ID ${id} not found`);
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    let attachments = clientResult.rows[0].additional_attachments || [];
+    if (typeof attachments === "string") {
+      attachments = JSON.parse(attachments); // Ensure it's an array
+    }
+    
+    attachments.push(fileUrl);
+
+    // Update the client with the new attachment
+    const updateResult = await pool.query(
+      "UPDATE clients SET additional_attachments = $1 WHERE id = $2 RETURNING *",
+      [JSON.stringify(attachments), id]
+    );
+
+    console.log("✅ Client attachments updated:", updateResult.rows[0]);
+    res.json(updateResult.rows[0]);
+
+  } catch (error) {
+    console.error("❌ S3 Upload Error:", error);
+    res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
 
