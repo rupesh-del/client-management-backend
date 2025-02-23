@@ -49,6 +49,25 @@ app.get("/clients", async (req, res) => {
   }
 });
 
+// API Route: Fetch a Single Client by ID
+app.get("/clients/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query("SELECT * FROM clients WHERE id = $1", [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error fetching client:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // API Route: Add New Client (Stores Data in PSQL)
 app.post("/clients", async (req, res) => {
   const {
