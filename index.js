@@ -159,8 +159,21 @@ app.put("/clients/:id", async (req, res) => {
     paid_to_apex,
     insurer,
     renewal_date,
-    additional_attachments // Ensure attachments are included
+    additional_attachments
   } = req.body;
+
+  if (!name || !policy_number) {
+    return res.status(400).json({ error: "Client name and policy number are required." });
+  }
+
+  let formattedDate = null;
+  if (renewal_date) {
+    try {
+      formattedDate = new Date(renewal_date).toISOString().split("T")[0]; // Convert to YYYY-MM-DD
+    } catch (error) {
+      return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
+    }
+  }
 
   try {
     console.log(`🔄 Updating client ID ${id} with new data`);
@@ -170,7 +183,17 @@ app.put("/clients/:id", async (req, res) => {
        SET name = $1, policy_number = $2, vehicle_number = $3, premium_paid = $4, 
            paid_to_apex = $5, insurer = $6, renewal_date = $7, additional_attachments = $8
        WHERE id = $9 RETURNING *`,
-      [name, policy_number, vehicle_number, premium_paid, paid_to_apex, insurer, renewal_date, JSON.stringify(additional_attachments), id]
+      [
+        name,
+        policy_number,
+        vehicle_number,
+        premium_paid,
+        paid_to_apex,
+        insurer,
+        formattedDate,
+        JSON.stringify(additional_attachments || []), // Ensure JSON format
+        id
+      ]
     );
 
     if (result.rowCount === 0) {
@@ -180,6 +203,7 @@ app.put("/clients/:id", async (req, res) => {
 
     console.log("✅ Client updated:", result.rows[0]);
     res.json(result.rows[0]);
+
   } catch (error) {
     console.error("❌ Error updating client:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -205,10 +229,9 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   try {
     await s3.send(new PutObjectCommand(params));
     const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
-
     console.log("✅ File Uploaded to S3:", fileUrl);
 
-    // Get existing attachments
+    // Ensure additionalAttachments field exists before updating
     const clientResult = await pool.query("SELECT additional_attachments FROM clients WHERE id = $1", [id]);
 
     if (clientResult.rowCount === 0) {
@@ -218,12 +241,12 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
 
     let attachments = clientResult.rows[0].additional_attachments || [];
     if (typeof attachments === "string") {
-      attachments = JSON.parse(attachments); // Ensure it's an array
+      attachments = JSON.parse(attachments); // Convert string to array if necessary
     }
     
     attachments.push(fileUrl);
 
-    // Update the client with the new attachment
+    // Update client with the new attachment list
     const updateResult = await pool.query(
       "UPDATE clients SET additional_attachments = $1 WHERE id = $2 RETURNING *",
       [JSON.stringify(attachments), id]
@@ -237,7 +260,6 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
-
 
 
 // Start Server
