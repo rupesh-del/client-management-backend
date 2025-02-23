@@ -201,8 +201,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype,
-    ACL: "public-read"
+    ContentType: req.file.mimetype
   };
 
   try {
@@ -240,6 +239,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
+
 
 
 // Start Server
