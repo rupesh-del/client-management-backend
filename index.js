@@ -163,6 +163,7 @@ app.put("/clients/:id", async (req, res) => {
   } = req.body;
 
   if (!name || !policy_number) {
+    console.log("❌ Missing required fields in request body");
     return res.status(400).json({ error: "Client name and policy number are required." });
   }
 
@@ -171,6 +172,7 @@ app.put("/clients/:id", async (req, res) => {
     try {
       formattedDate = new Date(renewal_date).toISOString().split("T")[0]; // Convert to YYYY-MM-DD
     } catch (error) {
+      console.log("❌ Invalid date format:", renewal_date);
       return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
     }
   }
@@ -209,6 +211,7 @@ app.put("/clients/:id", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   const { id } = req.params;
