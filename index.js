@@ -120,8 +120,7 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype,
-    ACL: "public-read" // Ensures files are publicly accessible
+    ContentType: req.file.mimetype
   };
 
   console.log("🟢 Uploading File:", fileName);
@@ -136,7 +135,6 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
-
 
 
 // API Route: Delete Client from PostgreSQL
