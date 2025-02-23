@@ -121,16 +121,15 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     Key: fileName,
     Body: req.file.buffer,
     ContentType: req.file.mimetype,
-    ACL: "public-read" // Ensure public access
+    ACL: "public-read" // Ensures files are publicly accessible
   };
 
   console.log("🟢 Uploading File:", fileName);
-  console.log("🔍 AWS Params:", params);
 
   try {
     await s3.send(new PutObjectCommand(params));
     const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
-    console.log("✅ File Uploaded to S3:", fileUrl);
+    console.log("✅ File Uploaded Successfully:", fileUrl);
     res.json({ fileUrl });
   } catch (error) {
     console.error("❌ S3 Upload Error:", error);
