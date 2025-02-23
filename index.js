@@ -92,6 +92,7 @@ app.post("/clients", async (req, res) => {
 // API Route: Upload File to AWS S3
 app.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) {
+    console.log("❌ No file received");
     return res.status(400).json({ error: "No file uploaded" });
   }
 
@@ -100,19 +101,23 @@ app.post("/upload", upload.single("file"), async (req, res) => {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype,
-    ACL: "public-read",
+    ContentType: req.file.mimetype
   };
+
+  console.log("🟢 Uploading File:", fileName);
+  console.log("🔍 AWS Params:", params);
 
   try {
     await s3.send(new PutObjectCommand(params));
     const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    console.log("✅ File Uploaded to S3:", fileUrl);
     res.json({ fileUrl });
   } catch (error) {
-    console.error("Error uploading file:", error);
-    res.status(500).json({ error: "Failed to upload file to S3" });
+    console.error("❌ S3 Upload Error:", error);
+    res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
   }
 });
+
 
 // API Route: Delete Client from PostgreSQL
 app.delete("/clients/:id", async (req, res) => {
