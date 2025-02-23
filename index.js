@@ -151,30 +151,22 @@ app.delete("/clients/:id", async (req, res) => {
 
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const {
-    name,
-    policy_number,
-    vehicle_number,
-    premium_paid,
-    paid_to_apex,
-    insurer,
-    renewal_date,
-    additional_attachments
-  } = req.body;
+  const updates = req.body; // Only updated fields
 
-  console.log("📥 Received update request:", req.body);
+  console.log("📥 Received update request:", updates);
 
-  if (!name || !policy_number) {
+  // Ensure name and policy_number are not removed
+  if (!updates.name || !updates.policy_number) {
     console.log("❌ Missing required fields in request body");
     return res.status(400).json({ error: "Client name and policy number are required." });
   }
 
   let formattedDate = null;
-  if (renewal_date) {
+  if (updates.renewal_date) {
     try {
-      formattedDate = new Date(renewal_date).toISOString().split("T")[0]; // Convert to YYYY-MM-DD
+      formattedDate = new Date(updates.renewal_date).toISOString().split("T")[0]; // Convert to YYYY-MM-DD
     } catch (error) {
-      console.log("❌ Invalid date format:", renewal_date);
+      console.log("❌ Invalid date format:", updates.renewal_date);
       return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
     }
   }
@@ -182,22 +174,27 @@ app.put("/clients/:id", async (req, res) => {
   try {
     console.log(`🔄 Updating client ID ${id} with new data`);
 
+    // Dynamically build query to update only edited fields
+    const fields = [];
+    const values = [];
+    let index = 1;
+
+    Object.keys(updates).forEach((key) => {
+      if (key === "renewal_date") {
+        fields.push(`${key} = $${index}`);
+        values.push(formattedDate);
+      } else {
+        fields.push(`${key} = $${index}`);
+        values.push(updates[key]);
+      }
+      index++;
+    });
+
+    values.push(id); // Last value for WHERE condition
+
     const result = await pool.query(
-      `UPDATE clients 
-       SET name = $1, policy_number = $2, vehicle_number = $3, premium_paid = $4, 
-           paid_to_apex = $5, insurer = $6, renewal_date = $7, additional_attachments = $8
-       WHERE id = $9 RETURNING *`,
-      [
-        name,
-        policy_number,
-        vehicle_number,
-        premium_paid,
-        paid_to_apex,
-        insurer,
-        formattedDate,
-        JSON.stringify(additional_attachments || []), // Ensure JSON format
-        id
-      ]
+      `UPDATE clients SET ${fields.join(", ")} WHERE id = $${index} RETURNING *`,
+      values
     );
 
     if (result.rowCount === 0) {
