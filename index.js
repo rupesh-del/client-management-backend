@@ -162,6 +162,8 @@ app.put("/clients/:id", async (req, res) => {
     additional_attachments
   } = req.body;
 
+  console.log("📥 Received update request:", req.body);
+
   if (!name || !policy_number) {
     console.log("❌ Missing required fields in request body");
     return res.status(400).json({ error: "Client name and policy number are required." });
