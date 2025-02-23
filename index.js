@@ -152,19 +152,33 @@ app.delete("/clients/:id", async (req, res) => {
 
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const { policy_document } = req.body;
+  const {
+    name,
+    policy_number,
+    vehicle_number,
+    premium_paid,
+    paid_to_apex,
+    insurer,
+    renewal_date
+  } = req.body;
 
   try {
+    console.log(`🔄 Updating client ID ${id} with new data`);
+
     const result = await pool.query(
-      "UPDATE clients SET policy_document = $1 WHERE id = $2 RETURNING *",
-      [policy_document, id]
+      `UPDATE clients 
+       SET name = $1, policy_number = $2, vehicle_number = $3, premium_paid = $4, 
+           paid_to_apex = $5, insurer = $6, renewal_date = $7
+       WHERE id = $8 RETURNING *`,
+      [name, policy_number, vehicle_number, premium_paid, paid_to_apex, insurer, renewal_date, id]
     );
 
     if (result.rowCount === 0) {
+      console.log(`❌ Client ID ${id} not found`);
       return res.status(404).json({ error: "Client not found" });
     }
 
-    console.log("✅ Client updated with policy document:", result.rows[0]);
+    console.log("✅ Client updated:", result.rows[0]);
     res.json(result.rows[0]);
   } catch (error) {
     console.error("❌ Error updating client:", error);
