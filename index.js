@@ -131,6 +131,29 @@ app.delete("/clients/:id", async (req, res) => {
   }
 });
 
+app.put("/clients/:id", async (req, res) => {
+  const { id } = req.params;
+  const { policy_document } = req.body;
+
+  try {
+    const result = await pool.query(
+      "UPDATE clients SET policy_document = $1 WHERE id = $2 RETURNING *",
+      [policy_document, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    console.log("✅ Client updated with policy document:", result.rows[0]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error updating client:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
