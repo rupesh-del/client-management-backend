@@ -151,50 +151,55 @@ app.delete("/clients/:id", async (req, res) => {
 
 app.put("/clients/:id", async (req, res) => {
   const { id } = req.params;
-  const updates = req.body; // Only updated fields
+  const updates = req.body; // Get updated fields
 
   console.log("📥 Received update request:", updates);
 
-  // Ensure name and policy_number are not removed
-  if (!updates.name || !updates.policy_number) {
-    console.log("❌ Missing required fields in request body");
-    return res.status(400).json({ error: "Client name and policy number are required." });
+  // Fetch existing client data first to prevent missing fields
+  const clientResult = await pool.query("SELECT * FROM clients WHERE id = $1", [id]);
+
+  if (clientResult.rowCount === 0) {
+    console.log(`❌ Client ID ${id} not found`);
+    return res.status(404).json({ error: "Client not found" });
   }
 
-  let formattedDate = null;
-  if (updates.renewal_date) {
-    try {
-      formattedDate = new Date(updates.renewal_date).toISOString().split("T")[0]; // Convert to YYYY-MM-DD
-    } catch (error) {
-      console.log("❌ Invalid date format:", updates.renewal_date);
-      return res.status(400).json({ error: "Invalid date format. Use YYYY-MM-DD." });
-    }
-  }
+  const existingClient = clientResult.rows[0];
+
+  // Merge existing data with updates
+  const finalUpdate = {
+    name: updates.name || existingClient.name,
+    policy_number: updates.policy_number || existingClient.policy_number,
+    vehicle_number: updates.vehicle_number || existingClient.vehicle_number,
+    premium_paid: updates.premium_paid || existingClient.premium_paid,
+    paid_to_apex: updates.paid_to_apex || existingClient.paid_to_apex,
+    insurer: updates.insurer || existingClient.insurer,
+    renewal_date: updates.renewal_date || existingClient.renewal_date,
+    additional_attachments: updates.additional_attachments || existingClient.additional_attachments,
+  };
+
+  let formattedDate = finalUpdate.renewal_date
+    ? new Date(finalUpdate.renewal_date).toISOString().split("T")[0]
+    : null;
 
   try {
     console.log(`🔄 Updating client ID ${id} with new data`);
 
-    // Dynamically build query to update only edited fields
-    const fields = [];
-    const values = [];
-    let index = 1;
-
-    Object.keys(updates).forEach((key) => {
-      if (key === "renewal_date") {
-        fields.push(`${key} = $${index}`);
-        values.push(formattedDate);
-      } else {
-        fields.push(`${key} = $${index}`);
-        values.push(updates[key]);
-      }
-      index++;
-    });
-
-    values.push(id); // Last value for WHERE condition
-
     const result = await pool.query(
-      `UPDATE clients SET ${fields.join(", ")} WHERE id = $${index} RETURNING *`,
-      values
+      `UPDATE clients 
+       SET name = $1, policy_number = $2, vehicle_number = $3, premium_paid = $4, 
+           paid_to_apex = $5, insurer = $6, renewal_date = $7, additional_attachments = $8
+       WHERE id = $9 RETURNING *`,
+      [
+        finalUpdate.name,
+        finalUpdate.policy_number,
+        finalUpdate.vehicle_number,
+        finalUpdate.premium_paid,
+        finalUpdate.paid_to_apex,
+        finalUpdate.insurer,
+        formattedDate,
+        JSON.stringify(finalUpdate.additional_attachments || []), // Ensure JSON format
+        id
+      ]
     );
 
     if (result.rowCount === 0) {
@@ -260,6 +265,43 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   } catch (error) {
     console.error("❌ S3 Upload Error:", error);
     res.status(500).json({ error: "Failed to upload file to S3", details: error.message });
+  }
+});
+
+// renewals:
+
+app.get("/clients/:clientId/renewals/:renewalId", async (req, res) => {
+  const { clientId, renewalId } = req.params;
+
+  try {
+    const result = await pool.query("SELECT * FROM renewals WHERE client_id = $1 AND id = $2", [clientId, renewalId]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Renewal not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error fetching renewal:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
+  const { clientId, renewalId } = req.params;
+
+  try {
+    const deleteResult = await pool.query("DELETE FROM renewals WHERE client_id = $1 AND id = $2 RETURNING *", [clientId, renewalId]);
+
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: "Renewal not found" });
+    }
+
+    console.log("✅ Renewal deleted:", deleteResult.rows[0]);
+    res.json({ message: "Renewal deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting renewal:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
