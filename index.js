@@ -296,31 +296,29 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   }
 
   const fileName = `uploads/${Date.now()}_${req.file.originalname}`;
+  const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+
   const params = {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
     ContentType: req.file.mimetype,
-    ACL: "public-read", // ✅ Ensure file is accessible
+    ACL: "public-read",
   };
 
   try {
     console.log("📤 Uploading file to AWS S3:", fileName);
     await s3.send(new PutObjectCommand(params));
 
-    // Construct AWS file URL
-    const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
-    // Return correct file URL to frontend
-    res.json({ fileUrl, message: "File uploaded successfully" });
-
+    // Return the correct file URL
+    res.json({ fileUrl });
   } catch (error) {
     console.error("❌ AWS S3 Upload Error:", error);
     res.status(500).json({ error: "Failed to upload file to AWS", details: error.message });
   }
 });
-
 
 
 app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
