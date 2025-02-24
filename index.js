@@ -290,15 +290,11 @@ app.get("/clients/:clientId/renewals/:renewalId", async (req, res) => {
 app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   const { id } = req.params;
 
-  // Log request for debugging
-  console.log("📥 Upload request received for client ID:", id);
-
   if (!req.file) {
     console.log("❌ No file received");
     return res.status(400).json({ error: "No file uploaded" });
   }
 
-  // Construct file name
   const fileName = `uploads/${Date.now()}_${req.file.originalname}`;
   const params = {
     Bucket: process.env.AWS_BUCKET_NAME,
@@ -316,26 +312,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
-    // Ensure client exists before updating
-    const clientResult = await pool.query("SELECT * FROM clients WHERE id = $1", [id]);
-
-    if (clientResult.rowCount === 0) {
-      return res.status(404).json({ error: "Client not found" });
-    }
-
-    let attachments = clientResult.rows[0].additional_attachments || [];
-    if (typeof attachments === "string") {
-      attachments = JSON.parse(attachments);
-    }
-    attachments.push(fileUrl);
-
-    // Update client with new file URL
-    const updateResult = await pool.query(
-      "UPDATE clients SET additional_attachments = $1 WHERE id = $2 RETURNING *",
-      [JSON.stringify(attachments), id]
-    );
-
-    console.log("✅ Client attachments updated:", updateResult.rows[0]);
+    // Return correct file URL to frontend
     res.json({ fileUrl, message: "File uploaded successfully" });
 
   } catch (error) {
@@ -343,6 +320,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Failed to upload file to AWS", details: error.message });
   }
 });
+
 
 
 app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
