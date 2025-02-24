@@ -351,6 +351,39 @@ app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
   }
 });
 
+// INVESTORS
+
+// ✅ Fetch all investors
+app.get("/investors", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM investors ORDER BY investment_date DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching investors:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ Add a new investor
+app.post("/investors", async (req, res) => {
+  const { name, investment_amount, roi, investment_date, next_payout_date } = req.body;
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO investors (name, investment_amount, roi, investment_date, next_payout_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [name, investment_amount, roi, investment_date, next_payout_date]
+    );
+
+    console.log("✅ Investor added:", result.rows[0]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error adding investor:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
