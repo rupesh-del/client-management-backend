@@ -311,7 +311,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     await s3.send(new PutObjectCommand(params));
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
-    // ✅ Ensure the renewal entry is created
+    // 🔥 Ensure the renewal entry is created correctly in `renewals`
     const renewalResult = await pool.query(
       `INSERT INTO renewals (client_id, policy_document) 
       VALUES ($1, $2) RETURNING *`,
@@ -319,7 +319,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     );
 
     console.log("✅ Renewal record created:", renewalResult.rows[0]);
-    res.json({ fileUrl });
+    res.json({ fileUrl, renewal: renewalResult.rows[0] });
 
   } catch (error) {
     console.error("❌ AWS S3 Upload Error:", error);
