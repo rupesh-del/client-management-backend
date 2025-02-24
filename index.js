@@ -356,7 +356,21 @@ app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
 // ✅ Fetch all investors
 app.get("/investors", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM investors ORDER BY date_joined DESC");
+    const result = await pool.query(`
+      SELECT 
+        id, 
+        name, 
+        account_type, 
+        status, 
+        investment_term, 
+        interest_definition, 
+        COALESCE(current_balance, 0.00) AS current_balance, 
+        COALESCE(account_balance, 0.00) AS account_balance,
+        date_joined, 
+        date_payable 
+      FROM investors 
+      ORDER BY date_joined DESC
+    `);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: "No investors found" });
@@ -368,6 +382,7 @@ app.get("/investors", async (req, res) => {
     res.status(500).json({ error: "Internal server error", details: error.message });
   }
 });
+
 
 
 // ✅ Add a new investor
@@ -388,6 +403,40 @@ app.post("/investors", async (req, res) => {
   }
 });
 
+// Deposits and Withdrawals
+// ✅ Add a Deposit
+app.post("/transactions/deposit", async (req, res) => {
+  const { investor_id, amount } = req.body;
+
+  try {
+    await pool.query(
+      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Deposit', $2)",
+      [investor_id, amount]
+    );
+
+    res.json({ message: "Deposit successful" });
+  } catch (error) {
+    console.error("❌ Error processing deposit:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ Add a Withdrawal
+app.post("/transactions/withdrawal", async (req, res) => {
+  const { investor_id, amount } = req.body;
+
+  try {
+    await pool.query(
+      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Withdrawal', $2)",
+      [investor_id, amount]
+    );
+
+    res.json({ message: "Withdrawal successful" });
+  } catch (error) {
+    console.error("❌ Error processing withdrawal:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 
