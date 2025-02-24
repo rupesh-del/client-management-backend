@@ -270,25 +270,29 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
 
 // renewals:
 
-app.get("/clients/:clientId/renewals/:renewalId", async (req, res) => {
-  const { clientId, renewalId } = req.params;
+app.get("/clients/:id/renewals", async (req, res) => {
+  const { id } = req.params;
 
   try {
-    const result = await pool.query("SELECT * FROM renewals WHERE client_id = $1 AND id = $2", [clientId, renewalId]);
+    const result = await pool.query(
+      "SELECT * FROM renewals WHERE client_id = $1 ORDER BY renewal_date DESC",
+      [id]
+    );
 
     if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Renewal not found" });
+      return res.status(404).json({ error: "No renewals found for this client" });
     }
 
-    res.json(result.rows[0]);
+    res.json(result.rows);
   } catch (error) {
-    console.error("❌ Error fetching renewal:", error);
+    console.error("❌ Error fetching renewals:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
-  const { id } = req.params;
+
+app.post("/renewals", upload.single("file"), async (req, res) => {
+  const { client_id, renewal_date, next_renewal_date } = req.body;
 
   if (!req.file) {
     console.log("❌ No file received");
@@ -311,15 +315,15 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     await s3.send(new PutObjectCommand(params));
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
-    // 🔥 Ensure the renewal entry is created correctly in `renewals`
+    // ✅ Insert into the renewals table
     const renewalResult = await pool.query(
-      `INSERT INTO renewals (client_id, policy_document) 
-      VALUES ($1, $2) RETURNING *`,
-      [id, fileUrl]
+      `INSERT INTO renewals (client_id, renewal_date, next_renewal_date, policy_document) 
+      VALUES ($1, $2, $3, $4) RETURNING *`,
+      [client_id, renewal_date, next_renewal_date, fileUrl]
     );
 
     console.log("✅ Renewal record created:", renewalResult.rows[0]);
-    res.json({ fileUrl, renewal: renewalResult.rows[0] });
+    res.json(renewalResult.rows[0]);
 
   } catch (error) {
     console.error("❌ AWS S3 Upload Error:", error);
