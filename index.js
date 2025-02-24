@@ -291,8 +291,9 @@ app.get("/clients/:id/renewals", async (req, res) => {
 });
 
 
-app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
-  const { id } = req.params;
+
+app.post("/renewals", upload.single("file"), async (req, res) => {
+  const { client_id, renewal_date, next_renewal_date } = req.body;
 
   if (!req.file) {
     console.log("❌ No file received");
@@ -306,7 +307,7 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
-    ContentType: req.file.mimetype, // ✅ Removed ACL: "public-read"
+    ContentType: req.file.mimetype,
   };
 
   try {
@@ -314,15 +315,15 @@ app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
     await s3.send(new PutObjectCommand(params));
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
-    // ✅ Insert into the renewals table
+    // ✅ INSERT into renewals table (Not modifying clients)
     const renewalResult = await pool.query(
-      `INSERT INTO renewals (client_id, policy_document) 
-      VALUES ($1, $2) RETURNING *`,
-      [id, fileUrl]
+      `INSERT INTO renewals (client_id, renewal_date, next_renewal_date, policy_document) 
+      VALUES ($1, $2, $3, $4) RETURNING *`,
+      [client_id, renewal_date, next_renewal_date, fileUrl]
     );
 
     console.log("✅ Renewal record created:", renewalResult.rows[0]);
-    res.json({ fileUrl, renewal: renewalResult.rows[0] });
+    res.json(renewalResult.rows[0]);
 
   } catch (error) {
     console.error("❌ AWS S3 Upload Error:", error);
