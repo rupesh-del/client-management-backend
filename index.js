@@ -356,13 +356,19 @@ app.delete("/clients/:clientId/renewals/:renewalId", async (req, res) => {
 // ✅ Fetch all investors
 app.get("/investors", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM investors ORDER BY investment_date DESC");
+    const result = await pool.query("SELECT * FROM investors ORDER BY date_joined DESC");
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "No investors found" });
+    }
+
     res.json(result.rows);
   } catch (error) {
-    console.error("Error fetching investors:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("❌ Error fetching investors:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
   }
 });
+
 
 // ✅ Add a new investor
 app.post("/investors", async (req, res) => {
