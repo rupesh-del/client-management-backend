@@ -290,22 +290,29 @@ app.get("/clients/:clientId/renewals/:renewalId", async (req, res) => {
 app.post("/clients/:id/upload", upload.single("file"), async (req, res) => {
   const { id } = req.params;
 
+  // Log request for debugging
+  console.log("📥 Upload request received for client ID:", id);
+
   if (!req.file) {
     console.log("❌ No file received");
     return res.status(400).json({ error: "No file uploaded" });
   }
 
+  // Construct file name
   const fileName = `uploads/${Date.now()}_${req.file.originalname}`;
   const params = {
     Bucket: process.env.AWS_BUCKET_NAME,
     Key: fileName,
     Body: req.file.buffer,
     ContentType: req.file.mimetype,
-    ACL: "public-read", // ✅ Ensure file is publicly accessible
+    ACL: "public-read", // ✅ Ensure file is accessible
   };
 
   try {
+    console.log("📤 Uploading file to AWS S3:", fileName);
     await s3.send(new PutObjectCommand(params));
+
+    // Construct AWS file URL
     const fileUrl = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
     console.log("✅ File Uploaded Successfully:", fileUrl);
 
