@@ -466,13 +466,16 @@ app.post("/transactions/process", async (req, res) => {
       newAccountBalance -= parseFloat(amount);
     }
 
+    // ✅ Correct Current Balance Calculation
+    let newCurrentBalance = newAccountBalance + (newAccountBalance * (roi / 100));
+
     // ✅ Update account_balance & current_balance
     await pool.query(
       `UPDATE investors 
        SET account_balance = $1,
-           current_balance = $1 + ($1 * (roi / 100))
-       WHERE id = $2`,
-      [newAccountBalance, investor_id]
+           current_balance = $2
+       WHERE id = $3`,
+      [newAccountBalance, newCurrentBalance, investor_id]
     );
 
     // ✅ Insert transaction into database
@@ -487,6 +490,7 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // Start Server
