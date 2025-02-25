@@ -363,7 +363,7 @@ app.get("/investors", async (req, res) => {
         account_type, 
         status, 
         investment_term, 
-        interest_definition, 
+        roi,  -- ✅ Using ROI instead of interest_definition
         investment_amount,
         account_balance,
         current_balance,
@@ -385,8 +385,6 @@ app.get("/investors", async (req, res) => {
 });
 
 
-
-
 // ✅ Add a new investor
 app.post("/investors", async (req, res) => {
   const { 
@@ -394,29 +392,27 @@ app.post("/investors", async (req, res) => {
     account_type, 
     investment_term, 
     investment_amount, 
-    interest_definition,
     roi
   } = req.body;
 
-  if (!name || !account_type || !investment_term || !investment_amount || !interest_definition || roi === undefined) {
+  if (!name || !account_type || !investment_term || !investment_amount || !roi) {
     return res.status(400).json({ error: "All fields are required" });
   }
 
   try {
     const result = await pool.query(
       `INSERT INTO investors 
-        (name, account_type, investment_term, investment_amount, interest_definition, roi, account_balance, current_balance) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+        (name, account_type, investment_term, investment_amount, roi, account_balance, current_balance) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7) 
       RETURNING *`,
       [
         name,
         account_type,
         investment_term,
         investment_amount,
-        interest_definition,
         roi,
         investment_amount, // Initial `account_balance` = investment amount
-        investment_amount + (investment_amount * (interest_definition / 100)) // Initial `current_balance`
+        investment_amount + (investment_amount * (roi / 100)) // Initial `current_balance`
       ]
     );
 
