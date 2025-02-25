@@ -447,9 +447,9 @@ app.post("/transactions/process", async (req, res) => {
       return res.status(400).json({ error: "Invalid transaction details" });
     }
 
-    // ✅ Get investor details
+    // ✅ Get current investor details
     const investorResult = await pool.query(
-      "SELECT account_balance, roi FROM investors WHERE id = $1::INTEGER",
+      `SELECT roi FROM investors WHERE id = $1`,
       [investorId]
     );
 
@@ -457,47 +457,63 @@ app.post("/transactions/process", async (req, res) => {
       return res.status(404).json({ error: "Investor not found" });
     }
 
-    let newAccountBalance = parseFloat(investorResult.rows[0].account_balance);
     let roi = parseFloat(investorResult.rows[0].roi);
 
-    // ✅ Process Deposit
-    if (transaction_type === "Deposit") {
-      newAccountBalance += amountValue;
-    }
-
-    // ✅ Process Withdrawal (Check if sufficient balance)
-    if (transaction_type === "Withdrawal") {
-      if (newAccountBalance < amountValue) {
-        return res.status(400).json({ error: "Insufficient funds for withdrawal" });
-      }
-      newAccountBalance -= amountValue;
-    }
-
-    // ✅ CORRECT CURRENT BALANCE FORMULA
-    let newCurrentBalance = newAccountBalance + (newAccountBalance * (roi / 100));
-
-    // ✅ Update account_balance & current_balance with explicit casting
-    await pool.query(
-      `UPDATE investors 
-       SET account_balance = $1::NUMERIC,
-           current_balance = ($1 + ($1 * ($2 / 100)))::NUMERIC
-       WHERE id = $3::INTEGER`,
-      [newAccountBalance, roi, investorId]
+    // ✅ Get Total Deposits and Withdrawals BEFORE processing new transaction
+    const balanceResult = await pool.query(
+      `SELECT 
+        COALESCE(SUM(CASE WHEN transaction_type = 'Deposit' THEN amount ELSE 0 END), 0) AS total_deposits,
+        COALESCE(SUM(CASE WHEN transaction_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS total_withdrawals
+      FROM transactions 
+      WHERE investor_id = $1`,
+      [investorId]
     );
 
-    // ✅ Insert transaction into database
+    let totalDeposits = parseFloat(balanceResult.rows[0].total_deposits);
+    let totalWithdrawals = parseFloat(balanceResult.rows[0].total_withdrawals);
+
+    // ✅ Compute Account Balance BEFORE applying the transaction
+    let accountBalance = totalDeposits - totalWithdrawals;
+
+    // ✅ Apply the New Transaction
+    if (transaction_type === "Deposit") {
+      accountBalance += amountValue;
+    } else if (transaction_type === "Withdrawal") {
+      if (accountBalance < amountValue) {
+        return res.status(400).json({ error: "Insufficient funds for withdrawal" });
+      }
+      accountBalance -= amountValue;
+    }
+
+    // ✅ Compute the New Current Balance
+    let currentBalance = accountBalance + (accountBalance * (roi / 100));
+
+    // ✅ Insert Transaction into Database
     await pool.query(
       "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1::INTEGER, $2::VARCHAR, $3::NUMERIC)",
       [investorId, transaction_type, amountValue]
     );
 
-    res.json({ message: `${transaction_type} successful` });
+    // ✅ Update investor balances in the database
+    await pool.query(
+      `UPDATE investors 
+       SET account_balance = $1::NUMERIC,
+           current_balance = $2::NUMERIC
+       WHERE id = $3::INTEGER`,
+      [accountBalance, currentBalance, investorId]
+    );
+
+    res.json({
+      message: `${transaction_type} successful`,
+      account_balance: accountBalance,
+      current_balance: currentBalance
+    });
+
   } catch (error) {
     console.error("❌ Error processing transaction:", error.message, error.stack);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 // Start Server
 const PORT = process.env.PORT || 5000;
