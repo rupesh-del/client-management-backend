@@ -466,16 +466,16 @@ app.post("/transactions/process", async (req, res) => {
       newAccountBalance -= parseFloat(amount);
     }
 
-    // ✅ CORRECT CURRENT BALANCE CALCULATION
+    // ✅ CORRECT CURRENT BALANCE FORMULA
     let newCurrentBalance = newAccountBalance + (newAccountBalance * (roi / 100));
 
     // ✅ Update account_balance & current_balance
     await pool.query(
       `UPDATE investors 
        SET account_balance = $1,
-           current_balance = $2
+           current_balance = $1 + ($1 * ($2 / 100))
        WHERE id = $3`,
-      [newAccountBalance, newCurrentBalance, investor_id]
+      [newAccountBalance, roi, investor_id]
     );
 
     // ✅ Insert transaction into database
