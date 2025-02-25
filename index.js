@@ -466,7 +466,7 @@ app.post("/transactions/process", async (req, res) => {
       newAccountBalance -= parseFloat(amount);
     }
 
-    // ✅ Correct Current Balance Calculation
+    // ✅ CORRECT CURRENT BALANCE CALCULATION
     let newCurrentBalance = newAccountBalance + (newAccountBalance * (roi / 100));
 
     // ✅ Update account_balance & current_balance
@@ -490,7 +490,6 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 // Start Server
