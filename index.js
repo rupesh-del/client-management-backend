@@ -574,6 +574,32 @@ app.delete("/investors/:id", async (req, res) => {
   }
 });
 
+// Transaction History
+
+// ✅ Get All Transactions for an Investor
+app.get("/transactions/:id", async (req, res) => {
+  try {
+    const investorId = parseInt(req.params.id, 10);
+
+    if (isNaN(investorId)) {
+      return res.status(400).json({ error: "Invalid investor ID" });
+    }
+
+    const transactionsResult = await pool.query(
+      `SELECT transaction_date, transaction_type, amount 
+       FROM transactions 
+       WHERE investor_id = $1 
+       ORDER BY transaction_date DESC`,
+      [investorId]
+    );
+
+    res.json(transactionsResult.rows);
+  } catch (error) {
+    console.error("❌ Error fetching transactions:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
