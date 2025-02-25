@@ -396,11 +396,11 @@ app.post("/investors/add", async (req, res) => {
   try {
     const result = await pool.query(
       `INSERT INTO investors (name, account_type, investment_term, roi, account_balance, current_balance, date_joined, date_payable, status)
-       VALUES ($1, $2, $3, $4, 0.00, 0.00, CURRENT_DATE, 
+       VALUES ($1, $2, $3::VARCHAR, $4, 0.00, 0.00, CURRENT_DATE, 
                CASE 
-                 WHEN $3 = '6 WEEKS' THEN CURRENT_DATE + INTERVAL '6 weeks'
-                 WHEN $3 = '6 MONTHS' THEN CURRENT_DATE + INTERVAL '6 months'
-                 WHEN $3 = '1 YEAR' THEN CURRENT_DATE + INTERVAL '1 year'
+                 WHEN $3::VARCHAR = '6 WEEKS' THEN CURRENT_DATE + INTERVAL '6 weeks'
+                 WHEN $3::VARCHAR = '6 MONTHS' THEN CURRENT_DATE + INTERVAL '6 months'
+                 WHEN $3::VARCHAR = '1 YEAR' THEN CURRENT_DATE + INTERVAL '1 year'
                END, 'Active') 
        RETURNING *`,
       [name, account_type, investment_term, parseFloat(roi)]
@@ -412,6 +412,7 @@ app.post("/investors/add", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 
