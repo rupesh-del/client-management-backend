@@ -364,10 +364,11 @@ app.get("/investors", async (req, res) => {
         status, 
         investment_term, 
         interest_definition, 
-        COALESCE(current_balance, 0.00) AS current_balance, 
-        COALESCE(account_balance, 0.00) AS account_balance,
-        date_joined, 
-        date_payable 
+        investment_amount,
+        account_balance,
+        current_balance,
+        TO_CHAR(date_joined, 'MM/DD/YYYY') AS date_joined, 
+        TO_CHAR(date_payable, 'MM/DD/YYYY') AS date_payable
       FROM investors 
       ORDER BY date_joined DESC
     `);
@@ -385,50 +386,83 @@ app.get("/investors", async (req, res) => {
 
 
 
+
 // ✅ Add a new investor
 app.post("/investors", async (req, res) => {
-  const { name, investment_amount, roi, investment_date, next_payout_date } = req.body;
+  const { 
+    name, 
+    account_type, 
+    investment_term, 
+    investment_amount, 
+    interest_definition,
+    roi
+  } = req.body;
+
+  if (!name || !account_type || !investment_term || !investment_amount || !interest_definition || roi === undefined) {
+    return res.status(400).json({ error: "All fields are required" });
+  }
 
   try {
     const result = await pool.query(
-      "INSERT INTO investors (name, investment_amount, roi, investment_date, next_payout_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [name, investment_amount, roi, investment_date, next_payout_date]
+      `INSERT INTO investors 
+        (name, account_type, investment_term, investment_amount, interest_definition, roi, account_balance, current_balance) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+      RETURNING *`,
+      [
+        name,
+        account_type,
+        investment_term,
+        investment_amount,
+        interest_definition,
+        roi,
+        investment_amount, // Initial `account_balance` = investment amount
+        investment_amount + (investment_amount * (interest_definition / 100)) // Initial `current_balance`
+      ]
     );
 
     console.log("✅ Investor added:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error("Error adding investor:", error);
-    res.status(500).json({ error: "Internal server error" });
+    console.error("❌ Error adding investor:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
   }
 });
 
-// Deposits and Withdrawals
-// ✅ Add a Deposit
-app.post("/transactions/deposit", async (req, res) => {
-  const { investor_id, amount } = req.body;
 
-  try {
-    await pool.query(
-      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Deposit', $2)",
-      [investor_id, amount]
-    );
-
-    res.json({ message: "Deposit successful" });
-  } catch (error) {
-    console.error("❌ Error processing deposit:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
 // ✅ Add a Withdrawal
 app.post("/transactions/withdrawal", async (req, res) => {
   const { investor_id, amount } = req.body;
 
+  if (!investor_id || !amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: "Invalid withdrawal amount" });
+  }
+
   try {
+    // ✅ Check if investor has sufficient balance
+    const investor = await pool.query("SELECT account_balance FROM investors WHERE id = $1", [investor_id]);
+
+    if (investor.rows.length === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    if (parseFloat(investor.rows[0].account_balance) < parseFloat(amount)) {
+      return res.status(400).json({ error: "Insufficient funds for withdrawal" });
+    }
+
+    // ✅ Insert transaction into the transactions table
     await pool.query(
       "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Withdrawal', $2)",
       [investor_id, amount]
+    );
+
+    // ✅ Update balances in the investors table
+    await pool.query(
+      `UPDATE investors 
+       SET account_balance = account_balance - $1,
+           current_balance = account_balance - $1 + (account_balance * (interest_definition / 100))
+       WHERE id = $2`,
+      [amount, investor_id]
     );
 
     res.json({ message: "Withdrawal successful" });
@@ -438,6 +472,36 @@ app.post("/transactions/withdrawal", async (req, res) => {
   }
 });
 
+// Deposit
+app.post("/transactions/deposit", async (req, res) => {
+  const { investor_id, amount } = req.body;
+
+  if (!investor_id || !amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: "Invalid deposit amount" });
+  }
+
+  try {
+    // ✅ Insert transaction into the transactions table
+    await pool.query(
+      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Deposit', $2)",
+      [investor_id, amount]
+    );
+
+    // ✅ Update balances in the investors table
+    await pool.query(
+      `UPDATE investors 
+       SET account_balance = account_balance + $1,
+           current_balance = account_balance + $1 + (account_balance * (interest_definition / 100))
+       WHERE id = $2`,
+      [amount, investor_id]
+    );
+
+    res.json({ message: "Deposit successful" });
+  } catch (error) {
+    console.error("❌ Error processing deposit:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 // Start Server
