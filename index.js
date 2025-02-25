@@ -446,17 +446,17 @@ app.post("/transactions/withdrawal", async (req, res) => {
       return res.status(400).json({ error: "Insufficient funds for withdrawal" });
     }
 
-    // ✅ Insert transaction into the transactions table
+    // ✅ Insert withdrawal transaction
     await pool.query(
       "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Withdrawal', $2)",
       [investor_id, amount]
     );
 
-    // ✅ Update balances in the investors table
+    // ✅ Update account_balance & current_balance
     await pool.query(
       `UPDATE investors 
        SET account_balance = account_balance - $1,
-           current_balance = account_balance - $1 + (account_balance * (interest_definition / 100))
+           current_balance = (account_balance - $1) + ((account_balance - $1) * (roi / 100))
        WHERE id = $2`,
       [amount, investor_id]
     );
@@ -468,6 +468,7 @@ app.post("/transactions/withdrawal", async (req, res) => {
   }
 });
 
+
 // Deposit
 app.post("/transactions/deposit", async (req, res) => {
   const { investor_id, amount } = req.body;
@@ -477,17 +478,17 @@ app.post("/transactions/deposit", async (req, res) => {
   }
 
   try {
-    // ✅ Insert transaction into the transactions table
+    // ✅ Insert deposit transaction
     await pool.query(
       "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Deposit', $2)",
       [investor_id, amount]
     );
 
-    // ✅ Update balances in the investors table
+    // ✅ Update account_balance & current_balance
     await pool.query(
       `UPDATE investors 
        SET account_balance = account_balance + $1,
-           current_balance = account_balance + $1 + (account_balance * (interest_definition / 100))
+           current_balance = (account_balance + $1) + ((account_balance + $1) * (roi / 100))
        WHERE id = $2`,
       [amount, investor_id]
     );
@@ -498,6 +499,7 @@ app.post("/transactions/deposit", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // Start Server
