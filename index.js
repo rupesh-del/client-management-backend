@@ -386,75 +386,6 @@ app.get("/investors", async (req, res) => {
 
 
 // ✅ Add a new investor
-app.post("/investors", async (req, res) => {
-  const { name, account_type, investment_term, roi } = req.body;
-
-  if (!name || !account_type || !investment_term || roi === undefined) {
-    return res.status(400).json({ error: "All fields are required" });
-  }
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO investors 
-        (name, account_type, investment_term, roi, account_balance, current_balance) 
-      VALUES ($1, $2, $3, $4, 0.00, 0.00) 
-      RETURNING *`,
-      [name, account_type, investment_term, roi]
-    );
-
-    console.log("✅ Investor added:", result.rows[0]);
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error("❌ Error adding investor:", error);
-    res.status(500).json({ error: "Internal server error", details: error.message });
-  }
-});
-
-
-// ✅ Add a Withdrawal
-app.post("/transactions/withdrawal", async (req, res) => {
-  const { investor_id, amount } = req.body;
-
-  if (!investor_id || !amount || parseFloat(amount) <= 0) {
-    return res.status(400).json({ error: "Invalid withdrawal amount" });
-  }
-
-  try {
-    // ✅ Check if investor has sufficient balance
-    const investor = await pool.query("SELECT account_balance FROM investors WHERE id = $1", [investor_id]);
-
-    if (investor.rows.length === 0) {
-      return res.status(404).json({ error: "Investor not found" });
-    }
-
-    if (parseFloat(investor.rows[0].account_balance) < parseFloat(amount)) {
-      return res.status(400).json({ error: "Insufficient funds for withdrawal" });
-    }
-
-    // ✅ Insert withdrawal transaction
-    await pool.query(
-      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Withdrawal', $2)",
-      [investor_id, amount]
-    );
-
-    // ✅ Update account_balance & current_balance
-    await pool.query(
-      `UPDATE investors 
-       SET account_balance = account_balance - $1,
-           current_balance = (account_balance - $1) + ((account_balance - $1) * (roi / 100))
-       WHERE id = $2`,
-      [amount, investor_id]
-    );
-
-    res.json({ message: "Withdrawal successful" });
-  } catch (error) {
-    console.error("❌ Error processing withdrawal:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
-
-
-// Deposit
 app.post("/transactions/deposit", async (req, res) => {
   const { investor_id, amount } = req.body;
 
@@ -469,15 +400,6 @@ app.post("/transactions/deposit", async (req, res) => {
       [investor_id, amount]
     );
 
-    // ✅ Update account_balance & current_balance
-    await pool.query(
-      `UPDATE investors 
-       SET account_balance = account_balance + $1,
-           current_balance = (account_balance + $1) + ((account_balance + $1) * (roi / 100))
-       WHERE id = $2`,
-      [amount, investor_id]
-    );
-
     res.json({ message: "Deposit successful" });
   } catch (error) {
     console.error("❌ Error processing deposit:", error);
@@ -486,6 +408,58 @@ app.post("/transactions/deposit", async (req, res) => {
 });
 
 
+app.post("/transactions/process", async (req, res) => {
+  const { investor_id, transaction_type, amount } = req.body;
+
+  if (!investor_id || !transaction_type || !amount || parseFloat(amount) <= 0) {
+    return res.status(400).json({ error: "Invalid transaction details" });
+  }
+
+  try {
+    // ✅ Get investor details
+    const investor = await pool.query("SELECT account_balance, roi FROM investors WHERE id = $1", [investor_id]);
+
+    if (investor.rows.length === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    let newAccountBalance = parseFloat(investor.rows[0].account_balance);
+    let roi = parseFloat(investor.rows[0].roi);
+
+    // ✅ Process Deposit
+    if (transaction_type === "Deposit") {
+      newAccountBalance += parseFloat(amount);
+    }
+
+    // ✅ Process Withdrawal (Check if sufficient balance)
+    if (transaction_type === "Withdrawal") {
+      if (newAccountBalance < parseFloat(amount)) {
+        return res.status(400).json({ error: "Insufficient funds for withdrawal" });
+      }
+      newAccountBalance -= parseFloat(amount);
+    }
+
+    // ✅ Update account_balance & current_balance
+    await pool.query(
+      `UPDATE investors 
+       SET account_balance = $1,
+           current_balance = $1 + ($1 * (roi / 100))
+       WHERE id = $2`,
+      [newAccountBalance, investor_id]
+    );
+
+    // ✅ Insert transaction into database
+    await pool.query(
+      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, $2, $3)",
+      [investor_id, transaction_type, amount]
+    );
+
+    res.json({ message: `${transaction_type} successful` });
+  } catch (error) {
+    console.error("❌ Error processing transaction:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 // Start Server
