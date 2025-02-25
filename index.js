@@ -515,6 +515,66 @@ app.post("/transactions/process", async (req, res) => {
   }
 });
 
+// Investor get and delete
+
+// ✅ Get a Single Investor by ID
+app.get("/investors/:id", async (req, res) => {
+  try {
+    const investorId = parseInt(req.params.id, 10);
+
+    if (isNaN(investorId)) {
+      return res.status(400).json({ error: "Invalid investor ID" });
+    }
+
+    const investorResult = await pool.query(
+      `SELECT * FROM investors WHERE id = $1`,
+      [investorId]
+    );
+
+    if (investorResult.rows.length === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    res.json(investorResult.rows[0]); // ✅ Return investor details
+  } catch (error) {
+    console.error("❌ Error fetching investor:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ Delete an Investor by ID
+app.delete("/investors/:id", async (req, res) => {
+  try {
+    const investorId = parseInt(req.params.id, 10);
+
+    if (isNaN(investorId)) {
+      return res.status(400).json({ error: "Invalid investor ID" });
+    }
+
+    // Check if the investor exists
+    const investorCheck = await pool.query(
+      `SELECT * FROM investors WHERE id = $1`,
+      [investorId]
+    );
+
+    if (investorCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    // Delete transactions associated with the investor (to maintain data integrity)
+    await pool.query(`DELETE FROM transactions WHERE investor_id = $1`, [investorId]);
+
+    // Delete the investor
+    await pool.query(`DELETE FROM investors WHERE id = $1`, [investorId]);
+
+    res.json({ message: "Investor deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting investor:", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
