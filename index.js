@@ -363,8 +363,7 @@ app.get("/investors", async (req, res) => {
         account_type, 
         status, 
         investment_term, 
-        roi,  -- ✅ Using ROI instead of interest_definition
-        investment_amount,
+        roi,  
         account_balance,
         current_balance,
         TO_CHAR(date_joined, 'MM/DD/YYYY') AS date_joined, 
@@ -385,35 +384,22 @@ app.get("/investors", async (req, res) => {
 });
 
 
+
 // ✅ Add a new investor
 app.post("/investors", async (req, res) => {
-  const { 
-    name, 
-    account_type, 
-    investment_term, 
-    investment_amount, 
-    roi
-  } = req.body;
+  const { name, account_type, investment_term, roi } = req.body;
 
-  if (!name || !account_type || !investment_term || !investment_amount || !roi) {
+  if (!name || !account_type || !investment_term || roi === undefined) {
     return res.status(400).json({ error: "All fields are required" });
   }
 
   try {
     const result = await pool.query(
       `INSERT INTO investors 
-        (name, account_type, investment_term, investment_amount, roi, account_balance, current_balance) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7) 
+        (name, account_type, investment_term, roi, account_balance, current_balance) 
+      VALUES ($1, $2, $3, $4, 0.00, 0.00) 
       RETURNING *`,
-      [
-        name,
-        account_type,
-        investment_term,
-        investment_amount,
-        roi,
-        investment_amount, // Initial `account_balance` = investment amount
-        investment_amount + (investment_amount * (roi / 100)) // Initial `current_balance`
-      ]
+      [name, account_type, investment_term, roi]
     );
 
     console.log("✅ Investor added:", result.rows[0]);
@@ -423,7 +409,6 @@ app.post("/investors", async (req, res) => {
     res.status(500).json({ error: "Internal server error", details: error.message });
   }
 });
-
 
 
 // ✅ Add a Withdrawal
@@ -499,6 +484,7 @@ app.post("/transactions/deposit", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 
