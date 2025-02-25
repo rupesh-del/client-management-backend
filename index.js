@@ -386,26 +386,56 @@ app.get("/investors", async (req, res) => {
 
 
 // ✅ Add a new investor
-app.post("/transactions/deposit", async (req, res) => {
-  const { investor_id, amount } = req.body;
+app.post("/investors/add", async (req, res) => {
+  const { name, account_type, investment_term, roi } = req.body;
 
-  if (!investor_id || !amount || parseFloat(amount) <= 0) {
-    return res.status(400).json({ error: "Invalid deposit amount" });
+  if (!name || !account_type || !investment_term || !roi) {
+    return res.status(400).json({ error: "All fields are required." });
   }
 
   try {
-    // ✅ Insert deposit transaction
-    await pool.query(
-      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1, 'Deposit', $2)",
-      [investor_id, amount]
+    const result = await pool.query(
+      `INSERT INTO investors (name, account_type, investment_term, roi, account_balance, current_balance, date_joined, date_payable, status)
+       VALUES ($1, $2, $3, $4, 0.00, 0.00, CURRENT_DATE, 
+               CASE 
+                 WHEN $3 = '6 WEEKS' THEN CURRENT_DATE + INTERVAL '6 weeks'
+                 WHEN $3 = '6 MONTHS' THEN CURRENT_DATE + INTERVAL '6 months'
+                 WHEN $3 = '1 YEAR' THEN CURRENT_DATE + INTERVAL '1 year'
+               END, 'Active') 
+       RETURNING *`,
+      [name, account_type, investment_term, parseFloat(roi)]
     );
 
-    res.json({ message: "Deposit successful" });
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-    console.error("❌ Error processing deposit:", error);
+    console.error("❌ Error adding investor:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
+
+app.delete("/investors/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // ✅ Delete all transactions associated with this investor
+    await pool.query("DELETE FROM transactions WHERE investor_id = $1", [id]);
+
+    // ✅ Delete the investor
+    const deleteResult = await pool.query("DELETE FROM investors WHERE id = $1 RETURNING *", [id]);
+
+    if (deleteResult.rowCount === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    res.json({ message: "Investor deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting investor:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 
 app.post("/transactions/process", async (req, res) => {
