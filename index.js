@@ -689,6 +689,52 @@ app.delete("/vehicle-types/:id", async (req, res) => {
   }
 });
 
+// Passenger Types
+app.get("/passenger-types", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM passenger_types ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error fetching passenger types:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.post("/passenger-types", async (req, res) => {
+  const { name, cost } = req.body;
+  if (!name || !cost) return res.status(400).json({ error: "Both fields are required." });
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO passenger_types (name, cost) VALUES ($1, $2) RETURNING *",
+      [name, cost]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error adding passenger type:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.delete("/passenger-types/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Ensure the ID exists before deleting
+    const checkExists = await pool.query("SELECT * FROM passenger_types WHERE id = $1", [id]);
+
+    if (checkExists.rowCount === 0) {
+      return res.status(404).json({ error: "Passenger type not found" });
+    }
+
+    // Delete the passenger type
+    await pool.query("DELETE FROM passenger_types WHERE id = $1", [id]);
+
+    res.json({ message: "✅ Passenger type deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting passenger type:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
