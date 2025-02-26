@@ -653,6 +653,41 @@ app.delete("/customers/:id", async (req, res) => {
   }
 });
 
+// Vehicle Types 
+app.get("/vehicle-types", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM vehicle_types ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error fetching vehicle types:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.post("/vehicle-types", async (req, res) => {
+  const { name, cost } = req.body;
+  if (!name || !cost) return res.status(400).json({ error: "Both fields are required." });
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO vehicle_types (name, cost) VALUES ($1, $2) RETURNING *",
+      [name, cost]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error adding vehicle type:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.delete("/vehicle-types/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM vehicle_types WHERE id = $1", [id]);
+    res.json({ message: "Vehicle type deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting vehicle type:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 
 // Start Server
