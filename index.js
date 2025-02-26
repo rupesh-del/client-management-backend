@@ -735,6 +735,9 @@ app.delete("/passenger-types/:id", async (req, res) => {
   }
 });
 
+// Bookings endpoint
+const bookingsRoutes = require("./routes/bookings");
+app.use("/bookings", bookingsRoutes);
 
 // Start Server
 const PORT = process.env.PORT || 5000;
