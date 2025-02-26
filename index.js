@@ -601,6 +601,60 @@ app.get("/transactions/:id", async (req, res) => {
 });
 
 
+// ================================
+// ✅ FERRYPASS COMPONENT
+// ================================
+// Customer page
+// ✅ Fetch All Customers
+app.get("/customers", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM customers ORDER BY id DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error fetching customers:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ Add New Customer
+app.post("/customers", async (req, res) => {
+  const { name, contact } = req.body;
+
+  if (!name || !contact) {
+    return res.status(400).json({ error: "Name and contact are required" });
+  }
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO customers (name, contact) VALUES ($1, $2) RETURNING *",
+      [name, contact]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error adding customer:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ✅ Delete Customer
+app.delete("/customers/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await pool.query("DELETE FROM customers WHERE id = $1 RETURNING *", [id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Customer not found" });
+    }
+
+    res.json({ message: "✅ Customer deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting customer:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
