@@ -919,6 +919,37 @@ app.delete("/bookings/:id", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// Vehicle number
+
+app.post("/vehicle-types", async (req, res) => {
+  const { vehicleNumber, vehicleType } = req.body;
+
+  if (!vehicleNumber || !vehicleType) {
+    return res.status(400).json({ error: "Vehicle number and type are required" });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO vehicles (vehicle_number, vehicle_type) VALUES ($1, $2) RETURNING *`,
+      [vehicleNumber, vehicleType]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("❌ Error adding vehicle:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+app.get("/vehicle-types", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM vehicles ORDER BY created_at DESC");
+    res.json(result.rows);
+  } catch (error) {
+    console.error("❌ Error fetching vehicles:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Backend running on port ${PORT}`));
