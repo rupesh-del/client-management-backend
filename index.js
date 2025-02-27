@@ -849,19 +849,41 @@ app.put("/bookings/:id", async (req, res) => {
 // ✅ Update Booking Status
 app.put("/bookings/:id/status", async (req, res) => {
   const { id } = req.params;
-  const { bookingStatus } = req.body;
+  const { bookingStatus, paymentStatus } = req.body;
 
   try {
-    const result = await pool.query(
-      `UPDATE bookings SET booking_status = $1 WHERE id = $2 RETURNING *`,
-      [bookingStatus, id]
-    );
+    let query = "";
+    let values = [];
+
+    if (bookingStatus !== undefined && paymentStatus !== undefined) {
+      // If both statuses are provided, update both
+      query = `UPDATE bookings SET booking_status = $1, payment_status = $2 WHERE id = $3 RETURNING *`;
+      values = [bookingStatus, paymentStatus, id];
+    } else if (bookingStatus !== undefined) {
+      // Only update booking status
+      query = `UPDATE bookings SET booking_status = $1 WHERE id = $2 RETURNING *`;
+      values = [bookingStatus, id];
+    } else if (paymentStatus !== undefined) {
+      // Only update payment status
+      query = `UPDATE bookings SET payment_status = $1 WHERE id = $2 RETURNING *`;
+      values = [paymentStatus, id];
+    } else {
+      return res.status(400).json({ error: "No valid status provided" });
+    }
+
+    const result = await pool.query(query, values);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Booking not found" });
+    }
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error("❌ Error updating booking status:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 // ✅ Update Payment Status
 app.put("/bookings/:id/payment", async (req, res) => {
