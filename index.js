@@ -943,7 +943,12 @@ app.post("/vehicle-numbers", async (req, res) => {
 
 app.get("/vehicle-numbers", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM vehicle_numbers ORDER BY created_at DESC");
+    const result = await pool.query(`
+      SELECT vn.vehicle_number, vt.name AS vehicle_type
+      FROM vehicle_numbers vn
+      LEFT JOIN vehicle_types vt ON vn.vehicle_type = vt.id
+      ORDER BY vn.created_at DESC
+    `);
     res.json(result.rows);
   } catch (error) {
     console.error("❌ Error fetching vehicle numbers:", error);
