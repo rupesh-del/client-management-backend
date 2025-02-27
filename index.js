@@ -922,7 +922,7 @@ app.delete("/bookings/:id", async (req, res) => {
 
 // Vehicle number
 
-app.post("/vehicle-types", async (req, res) => {
+app.post("/vehicle-numbers", async (req, res) => {
   const { vehicleNumber, vehicleType } = req.body;
 
   if (!vehicleNumber || !vehicleType) {
@@ -931,24 +931,26 @@ app.post("/vehicle-types", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `INSERT INTO vehicles (vehicle_number, vehicle_type) VALUES ($1, $2) RETURNING *`,
+      `INSERT INTO vehicle_numbers (vehicle_number, vehicle_type) VALUES ($1, $2) RETURNING *`,
       [vehicleNumber, vehicleType]
     );
     res.json(result.rows[0]);
   } catch (error) {
-    console.error("❌ Error adding vehicle:", error);
+    console.error("❌ Error adding vehicle number:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
-app.get("/vehicle-types", async (req, res) => {
+
+app.get("/vehicle-numbers", async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM vehicles ORDER BY created_at DESC");
+    const result = await pool.query("SELECT * FROM vehicle_numbers ORDER BY created_at DESC");
     res.json(result.rows);
   } catch (error) {
-    console.error("❌ Error fetching vehicles:", error);
+    console.error("❌ Error fetching vehicle numbers:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 // Start Server
 const PORT = process.env.PORT || 5000;
