@@ -434,19 +434,17 @@ app.delete("/investors/:id", async (req, res) => {
 
 app.post("/transactions/process", async (req, res) => {
   try {
-    let { investor_id, transaction_type, amount } = req.body;
+    let { investor_id, transaction_type, amount, transaction_date } = req.body;
 
-    // ✅ Convert and Validate Inputs
     const investorId = parseInt(investor_id, 10);
     const amountValue = parseFloat(amount);
 
-    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0) {
+    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0 || !transaction_date) {
       return res.status(400).json({ error: "Invalid transaction details" });
     }
 
-    // ✅ Get current investor details
     const investorResult = await pool.query(
-      `SELECT roi FROM investors WHERE id = $1`,
+      `SELECT roi, investment_term FROM investors WHERE id = $1`,
       [investorId]
     );
 
@@ -454,42 +452,84 @@ app.post("/transactions/process", async (req, res) => {
       return res.status(404).json({ error: "Investor not found" });
     }
 
-    let roi = parseFloat(investorResult.rows[0].roi);
+    const { roi, investment_term } = investorResult.rows[0];
 
-    // ✅ Get Total Deposits and Withdrawals BEFORE processing new transaction
-    const balanceResult = await pool.query(
-      `SELECT 
-        COALESCE(SUM(CASE WHEN transaction_type = 'Deposit' THEN amount ELSE 0 END), 0) AS total_deposits,
-        COALESCE(SUM(CASE WHEN transaction_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS total_withdrawals
-      FROM transactions 
-      WHERE investor_id = $1`,
+    const termMapping = {
+      "6 WEEKS": "6 weeks",
+      "6 MONTHS": "6 months",
+      "1 YEAR": "1 year"
+    };
+
+    if (transaction_type === "Deposit") {
+      const maturityInterval = termMapping[investment_term];
+
+      // Calculate maturity from provided transaction date
+      const maturityDateResult = await pool.query(
+        "SELECT $1::TIMESTAMP + INTERVAL $2 AS maturity_date",
+        [transaction_date, maturityInterval]
+      );
+
+      const maturityDate = maturityDateResult.rows[0].maturity_date;
+
+      await pool.query(
+        `INSERT INTO transactions 
+          (investor_id, transaction_type, amount, roi, maturity_date, matured, transaction_date) 
+         VALUES ($1, 'Deposit', $2, $3, $4, FALSE, $5::TIMESTAMP)`,
+        [investorId, amountValue, roi, maturityDate, transaction_date]
+      );
+
+    } else if (transaction_type === "Withdrawal") {
+      const balanceResult = await pool.query(
+        `SELECT 
+          COALESCE(SUM(CASE WHEN transaction_type = 'Deposit' THEN amount ELSE 0 END), 0) -
+          COALESCE(SUM(CASE WHEN transaction_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS account_balance
+        FROM transactions WHERE investor_id = $1`,
+        [investorId]
+      );
+
+      const availableBalance = parseFloat(balanceResult.rows[0].account_balance);
+
+      if (availableBalance < amountValue) {
+        return res.status(400).json({ error: "Insufficient funds for withdrawal" });
+      }
+
+      await pool.query(
+        `INSERT INTO transactions 
+          (investor_id, transaction_type, amount, transaction_date) 
+         VALUES ($1, 'Withdrawal', $2, $3::TIMESTAMP)`,
+        [investorId, amountValue, transaction_date]
+      );
+    }
+
+    // ✅ Dynamically Recalculate Investor Balances After Transaction
+    const transactions = await pool.query(
+      `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
     );
 
-    let totalDeposits = parseFloat(balanceResult.rows[0].total_deposits);
-    let totalWithdrawals = parseFloat(balanceResult.rows[0].total_withdrawals);
+    let totalDeposits = 0;
+    let totalWithdrawals = 0;
+    let maturedROI = 0;
+    let unmaturedROI = 0;
+    const now = new Date();
 
-    // ✅ Compute Account Balance BEFORE applying the transaction
-    let accountBalance = totalDeposits - totalWithdrawals;
+    transactions.rows.forEach(txn => {
+      if (txn.transaction_type === 'Deposit') {
+        totalDeposits += parseFloat(txn.amount);
+        const roiAmount = parseFloat(txn.amount) * (parseFloat(txn.roi) / 100);
 
-    // ✅ Apply the New Transaction
-    if (transaction_type === "Deposit") {
-      accountBalance += amountValue;
-    } else if (transaction_type === "Withdrawal") {
-      if (accountBalance < amountValue) {
-        return res.status(400).json({ error: "Insufficient funds for withdrawal" });
+        if (new Date(txn.maturity_date) <= now) {
+          maturedROI += roiAmount;
+        } else {
+          unmaturedROI += roiAmount;
+        }
+      } else if (txn.transaction_type === 'Withdrawal') {
+        totalWithdrawals += parseFloat(txn.amount);
       }
-      accountBalance -= amountValue;
-    }
+    });
 
-    // ✅ Compute the New Current Balance
-    let currentBalance = accountBalance + (accountBalance * (roi / 100));
-
-    // ✅ Insert Transaction into Database
-    await pool.query(
-      "INSERT INTO transactions (investor_id, transaction_type, amount) VALUES ($1::INTEGER, $2::VARCHAR, $3::NUMERIC)",
-      [investorId, transaction_type, amountValue]
-    );
+    const accountBalance = totalDeposits + maturedROI - totalWithdrawals;
+    const currentBalance = accountBalance + unmaturedROI;
 
     // ✅ Update investor balances in the database
     await pool.query(
@@ -511,6 +551,8 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+
 
 // Investor get and delete
 
