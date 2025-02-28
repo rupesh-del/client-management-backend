@@ -438,8 +438,9 @@ app.post("/transactions/process", async (req, res) => {
 
     const investorId = parseInt(investor_id, 10);
     const amountValue = parseFloat(amount);
+    transaction_date = new Date(transaction_date);
 
-    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0 || !transaction_date) {
+    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0 || isNaN(transaction_date.getTime())) {
       return res.status(400).json({ error: "Invalid transaction details" });
     }
 
@@ -463,7 +464,6 @@ app.post("/transactions/process", async (req, res) => {
     if (transaction_type === "Deposit") {
       const maturityInterval = termMapping[investment_term];
 
-      // Calculate maturity from provided transaction date
       const maturityDateResult = await pool.query(
         "SELECT $1::TIMESTAMP + INTERVAL $2 AS maturity_date",
         [transaction_date, maturityInterval]
@@ -501,7 +501,7 @@ app.post("/transactions/process", async (req, res) => {
       );
     }
 
-    // ✅ Dynamically Recalculate Investor Balances After Transaction
+    // ✅ Recalculate balances dynamically
     const transactions = await pool.query(
       `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
@@ -531,7 +531,6 @@ app.post("/transactions/process", async (req, res) => {
     const accountBalance = totalDeposits + maturedROI - totalWithdrawals;
     const currentBalance = accountBalance + unmaturedROI;
 
-    // ✅ Update investor balances in the database
     await pool.query(
       `UPDATE investors 
        SET account_balance = $1::NUMERIC,
@@ -551,6 +550,7 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 
