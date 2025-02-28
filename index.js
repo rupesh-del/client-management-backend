@@ -651,19 +651,36 @@ app.get("/transactions/:id", async (req, res) => {
     }
 
     const transactionsResult = await pool.query(
-      `SELECT transaction_date, transaction_type, amount 
+      `SELECT 
+          transaction_date, 
+          transaction_type, 
+          amount 
        FROM transactions 
        WHERE investor_id = $1 
        ORDER BY transaction_date DESC`,
       [investorId]
     );
 
-    res.json(transactionsResult.rows);
+    // ✅ Fetch total matured interest for this investor
+    const interestResult = await pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS total_interest 
+       FROM transactions 
+       WHERE investor_id = $1 AND transaction_type = 'Interest'`,
+      [investorId]
+    );
+
+    const totalInterest = parseFloat(interestResult.rows[0].total_interest);
+
+    res.json({
+      transactions: transactionsResult.rows,
+      total_interest: totalInterest,
+    });
   } catch (error) {
     console.error("❌ Error fetching transactions:", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // ================================
