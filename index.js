@@ -385,20 +385,34 @@ app.get("/investors", async (req, res) => {
 
 
 
-// ✅ Add a new investor
 app.post("/investors/add", async (req, res) => {
-  const { name, account_type, investment_term, roi } = req.body;
+  const { name, account_type, investment_term, roi, date_joined } = req.body; // ✅ added date_joined
 
-  if (!name || !account_type || !investment_term || !roi) {
+  if (!name || !account_type || !investment_term || !roi || !date_joined) { // ✅ updated validation
     return res.status(400).json({ error: "All fields are required." });
   }
 
+  // ✅ Dynamically calculate date_payable based on investment term
+  const termMapping = {
+    "6 WEEKS": "6 weeks",
+    "6 MONTHS": "6 months",
+    "1 YEAR": "1 year"
+  };
+
+  const datePayableQuery = `
+    SELECT ($1::date + interval '${termMapping[investment_term]}') AS date_payable
+  `;
+
   try {
+    const payableResult = await pool.query(datePayableQuery, [date_joined]);
+    const date_payable = payableResult.rows[0].date_payable;
+
     const result = await pool.query(
-      `INSERT INTO investors (name, account_type, investment_term, roi, account_balance, current_balance, date_joined, status)
-       VALUES ($1, $2, $3::VARCHAR, $4, 0.00, 0.00, CURRENT_DATE, 'Active') 
-       RETURNING *`,
-      [name, account_type, investment_term, parseFloat(roi)]
+      `INSERT INTO investors 
+      (name, account_type, investment_term, roi, account_balance, current_balance, date_joined, date_payable, status)
+      VALUES ($1, $2, $3::VARCHAR, $4, 0.00, 0.00, $5::DATE, $6::DATE, 'Active') 
+      RETURNING *`,
+      [name, account_type, investment_term, parseFloat(roi), date_joined, date_payable]
     );
 
     res.status(201).json(result.rows[0]);
@@ -407,7 +421,6 @@ app.post("/investors/add", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 
@@ -432,7 +445,6 @@ app.delete("/investors/:id", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
 
 
 app.post("/transactions/process", async (req, res) => {
