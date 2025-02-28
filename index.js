@@ -465,9 +465,10 @@ app.post("/transactions/process", async (req, res) => {
       const maturityInterval = termMapping[investment_term];
 
       const maturityDateResult = await pool.query(
-        "SELECT $1::TIMESTAMP + INTERVAL $2 AS maturity_date",
+        "SELECT $1::TIMESTAMP + $2::interval AS maturity_date",
         [transactionDate, maturityInterval]
       );
+      
 
       const maturityDate = maturityDateResult.rows[0].maturity_date;
 
