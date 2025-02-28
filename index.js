@@ -431,7 +431,6 @@ app.delete("/investors/:id", async (req, res) => {
   }
 });
 
-
 app.post("/transactions/process", async (req, res) => {
   try {
     let { investor_id, transaction_type, amount, transaction_date } = req.body;
@@ -468,7 +467,6 @@ app.post("/transactions/process", async (req, res) => {
         "SELECT $1::TIMESTAMP + $2::interval AS maturity_date",
         [transactionDate, maturityInterval]
       );
-      
 
       const maturityDate = maturityDateResult.rows[0].maturity_date;
 
@@ -480,15 +478,16 @@ app.post("/transactions/process", async (req, res) => {
       );
 
     } else if (transaction_type === "Withdrawal") {
+      // ✅ Get total deposits + matured ROI for available balance
       const balanceResult = await pool.query(
         `SELECT 
-          COALESCE(SUM(CASE WHEN transaction_type = 'Deposit' THEN amount ELSE 0 END), 0) -
-          COALESCE(SUM(CASE WHEN transaction_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS account_balance
+          COALESCE(SUM(CASE WHEN transaction_type IN ('Deposit', 'Interest') THEN amount ELSE 0 END), 0) -
+          COALESCE(SUM(CASE WHEN transaction_type = 'Withdrawal' THEN amount ELSE 0 END), 0) AS available_balance
         FROM transactions WHERE investor_id = $1`,
         [investorId]
       );
 
-      const availableBalance = parseFloat(balanceResult.rows[0].account_balance);
+      const availableBalance = parseFloat(balanceResult.rows[0].available_balance);
 
       if (availableBalance < amountValue) {
         return res.status(400).json({ error: "Insufficient funds for withdrawal" });
@@ -502,7 +501,32 @@ app.post("/transactions/process", async (req, res) => {
       );
     }
 
-    // ✅ Dynamically recalculate balances after transaction
+    // ✅ Maturity Check: Convert matured ROI into an 'Interest' transaction
+    const maturedDeposits = await pool.query(
+      `SELECT id, amount, roi, maturity_date FROM transactions 
+       WHERE investor_id = $1 AND transaction_type = 'Deposit' 
+       AND matured = FALSE AND maturity_date <= NOW()`,
+      [investorId]
+    );
+
+    for (let txn of maturedDeposits.rows) {
+      const roiAmount = parseFloat(txn.amount) * (parseFloat(txn.roi) / 100);
+
+      // Insert matured interest as a separate transaction
+      await pool.query(
+        `INSERT INTO transactions (investor_id, transaction_type, amount, transaction_date) 
+         VALUES ($1, 'Interest', $2, NOW())`,
+        [investorId, roiAmount]
+      );
+
+      // Mark the deposit as matured
+      await pool.query(
+        `UPDATE transactions SET matured = TRUE WHERE id = $1`,
+        [txn.id]
+      );
+    }
+
+    // ✅ Recalculate balances dynamically
     const transactions = await pool.query(
       `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
@@ -524,6 +548,8 @@ app.post("/transactions/process", async (req, res) => {
         } else {
           unmaturedROI += roiAmount;
         }
+      } else if (txn.transaction_type === 'Interest') {
+        maturedROI += parseFloat(txn.amount);
       } else if (txn.transaction_type === 'Withdrawal') {
         totalWithdrawals += parseFloat(txn.amount);
       }
@@ -551,6 +577,7 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
 
 
 // Investor get and delete
