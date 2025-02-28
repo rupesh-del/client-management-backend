@@ -438,9 +438,9 @@ app.post("/transactions/process", async (req, res) => {
 
     const investorId = parseInt(investor_id, 10);
     const amountValue = parseFloat(amount);
-    transaction_date = new Date(transaction_date);
+    const transactionDate = new Date(transaction_date);
 
-    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0 || isNaN(transaction_date.getTime())) {
+    if (isNaN(investorId) || isNaN(amountValue) || amountValue <= 0 || isNaN(transactionDate.getTime())) {
       return res.status(400).json({ error: "Invalid transaction details" });
     }
 
@@ -466,7 +466,7 @@ app.post("/transactions/process", async (req, res) => {
 
       const maturityDateResult = await pool.query(
         "SELECT $1::TIMESTAMP + INTERVAL $2 AS maturity_date",
-        [transaction_date, maturityInterval]
+        [transactionDate, maturityInterval]
       );
 
       const maturityDate = maturityDateResult.rows[0].maturity_date;
@@ -475,7 +475,7 @@ app.post("/transactions/process", async (req, res) => {
         `INSERT INTO transactions 
           (investor_id, transaction_type, amount, roi, maturity_date, matured, transaction_date) 
          VALUES ($1, 'Deposit', $2, $3, $4, FALSE, $5::TIMESTAMP)`,
-        [investorId, amountValue, roi, maturityDate, transaction_date]
+        [investorId, amountValue, roi, maturityDate, transactionDate]
       );
 
     } else if (transaction_type === "Withdrawal") {
@@ -497,11 +497,11 @@ app.post("/transactions/process", async (req, res) => {
         `INSERT INTO transactions 
           (investor_id, transaction_type, amount, transaction_date) 
          VALUES ($1, 'Withdrawal', $2, $3::TIMESTAMP)`,
-        [investorId, amountValue, transaction_date]
+        [investorId, amountValue, transactionDate]
       );
     }
 
-    // ✅ Recalculate balances dynamically
+    // ✅ Dynamically recalculate balances after transaction
     const transactions = await pool.query(
       `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
@@ -550,8 +550,6 @@ app.post("/transactions/process", async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
-
-
 
 
 // Investor get and delete
