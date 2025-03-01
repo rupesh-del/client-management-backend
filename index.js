@@ -502,12 +502,15 @@ app.post("/transactions/process", async (req, res) => {
     }
 
     // ✅ Maturity Check: Convert matured ROI into an 'Interest' transaction
-    const maturedDeposits = await pool.query(
+    const maturedDepositsResult = await pool.query(
       `SELECT id, amount, roi, maturity_date FROM transactions 
        WHERE investor_id = $1 AND transaction_type = 'Deposit' 
        AND matured = FALSE AND maturity_date <= NOW()`,
       [investorId]
     );
+    
+    const maturedDeposits = Array.isArray(maturedDepositsResult.rows) ? maturedDepositsResult.rows : []; // ✅ Always ensures an array
+    
 
     for (let txn of maturedDeposits.rows) {
       const roiAmount = parseFloat(txn.amount) * (parseFloat(txn.roi) / 100);
