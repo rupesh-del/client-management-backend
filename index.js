@@ -527,10 +527,13 @@ app.post("/transactions/process", async (req, res) => {
     }
 
     // ✅ Recalculate balances dynamically
-    const transactions = await pool.query(
+    const transactionsResult = await pool.query(
       `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
     );
+    
+    const transactions = Array.isArray(transactionsResult.rows) ? transactionsResult.rows : []; // ✅ Ensures it's always an array
+    
 
     let totalDeposits = 0;
     let totalWithdrawals = 0;
