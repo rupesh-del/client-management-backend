@@ -478,7 +478,6 @@ app.post("/transactions/process", async (req, res) => {
       );
 
     } else if (transaction_type === "Withdrawal") {
-      // ✅ Get total deposits + matured ROI for available balance
       const balanceResult = await pool.query(
         `SELECT 
           COALESCE(SUM(CASE WHEN transaction_type IN ('Deposit', 'Interest') THEN amount ELSE 0 END), 0) -
@@ -508,21 +507,18 @@ app.post("/transactions/process", async (req, res) => {
        AND matured = FALSE AND maturity_date <= NOW()`,
       [investorId]
     );
-    
-    const maturedDeposits = Array.isArray(maturedDepositsResult.rows) ? maturedDepositsResult.rows : []; // ✅ Always ensures an array
-    
 
-    for (let txn of maturedDeposits.rows) {
+    const maturedDeposits = maturedDepositsResult.rows || []; // ✅ Always ensures an array
+
+    for (let txn of maturedDeposits) {
       const roiAmount = parseFloat(txn.amount) * (parseFloat(txn.roi) / 100);
 
-      // Insert matured interest as a separate transaction
       await pool.query(
         `INSERT INTO transactions (investor_id, transaction_type, amount, transaction_date) 
          VALUES ($1, 'Interest', $2, NOW())`,
         [investorId, roiAmount]
       );
 
-      // Mark the deposit as matured
       await pool.query(
         `UPDATE transactions SET matured = TRUE WHERE id = $1`,
         [txn.id]
@@ -534,9 +530,8 @@ app.post("/transactions/process", async (req, res) => {
       `SELECT * FROM transactions WHERE investor_id = $1`,
       [investorId]
     );
-    
-    const transactions = Array.isArray(transactionsResult.rows) ? transactionsResult.rows : []; // ✅ Ensures it's always an array
-    
+
+    const transactions = transactionsResult.rows || []; // ✅ Ensures it's always an array
 
     let totalDeposits = 0;
     let totalWithdrawals = 0;
@@ -544,7 +539,7 @@ app.post("/transactions/process", async (req, res) => {
     let unmaturedROI = 0;
     const now = new Date();
 
-    transactions.rows.forEach(txn => {
+    transactions.forEach(txn => {
       if (txn.transaction_type === 'Deposit') {
         totalDeposits += parseFloat(txn.amount);
         const roiAmount = parseFloat(txn.amount) * (parseFloat(txn.roi) / 100);
@@ -562,16 +557,15 @@ app.post("/transactions/process", async (req, res) => {
     });
 
     const totalInterest = transactions
-    .filter(t => t.transaction_type === 'Interest')
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-  
-  const totalUnmaturedROI = transactions
-    .filter(t => t.transaction_type === 'Deposit')
-    .reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.roi) / 100), 0) - totalInterest; // ✅ Ensures only unmatured interest is included
-  
-  const accountBalance = totalDeposits + totalInterest - totalWithdrawals;
-  const currentBalance = accountBalance + totalUnmaturedROI; // ✅ Now includes unmatured interest
-  
+      .filter(t => t.transaction_type === 'Interest')
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+    const totalUnmaturedROI = transactions
+      .filter(t => t.transaction_type === 'Deposit')
+      .reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.roi) / 100), 0) - totalInterest;
+
+    const accountBalance = totalDeposits + totalInterest - totalWithdrawals;
+    const currentBalance = accountBalance + totalUnmaturedROI;
 
     await pool.query(
       `UPDATE investors 
