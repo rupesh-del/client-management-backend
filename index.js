@@ -555,8 +555,17 @@ app.post("/transactions/process", async (req, res) => {
       }
     });
 
-    const accountBalance = totalDeposits + maturedROI - totalWithdrawals;
-    const currentBalance = accountBalance + unmaturedROI;
+    const totalInterest = transactions
+    .filter(t => t.transaction_type === 'Interest')
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  
+  const totalUnmaturedROI = transactions
+    .filter(t => t.transaction_type === 'Deposit')
+    .reduce((sum, t) => sum + (parseFloat(t.amount) * parseFloat(t.roi) / 100), 0) - totalInterest; // ✅ Ensures only unmatured interest is included
+  
+  const accountBalance = totalDeposits + totalInterest - totalWithdrawals;
+  const currentBalance = accountBalance + totalUnmaturedROI; // ✅ Now includes unmatured interest
+  
 
     await pool.query(
       `UPDATE investors 
