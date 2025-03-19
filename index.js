@@ -690,6 +690,31 @@ app.get("/transactions/:id", async (req, res) => {
   }
 });
 
+// ✅ Update Investor Status
+app.put("/investors/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // ✅ Extract status from request body
+
+  if (!status) {
+    return res.status(400).json({ error: "Status is required" });
+  }
+
+  try {
+    const result = await pool.query(
+      "UPDATE investors SET status = $1 WHERE id = $2 RETURNING *",
+      [status, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Investor not found" });
+    }
+
+    res.json(result.rows[0]); // ✅ Return updated investor data
+  } catch (error) {
+    console.error("❌ Error updating investor status:", error);
+    res.status(500).json({ error: "Server error updating status" });
+  }
+});
 
 
 // ================================
